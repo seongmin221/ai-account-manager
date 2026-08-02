@@ -1,0 +1,12 @@
+# Build artifacts
+/account-manager
+/bin/
+/dist/
+
+# Go tooling
+coverage.out
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/

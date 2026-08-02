@@ -30,6 +30,15 @@
 
 ## 1. 도메인 타입과 공통 계약
 
+### 현재 구현 상태
+
+1단계부터 9단계의 핵심 계약과 테스트가 구현되어 있다. 현재 바이너리는 읽기·쓰기
+CLI, GitHub/Codex provider, Keychain adapter, provider transaction, zsh patch를
+포함한다. zsh 설정 파일에 wrapper를 자동 설치하는 동작과 실제 계정/Keychain을
+사용하는 macOS 수동 통합 검증은 별도 작업으로 남아 있다.
+
+### 구현 세부
+
 먼저 실제 파일, Keychain, `gh`, `codex`에 접근하지 않는 순수 코드부터
 구현한다.
 

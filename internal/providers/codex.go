@@ -37,6 +37,25 @@ func NewCodexProvider(runner execution.CommandRunner, store credentials.Store) *
 
 func (p *CodexProvider) ID() config.ProviderID { return codexProviderID }
 
+// Login starts the interactive Codex login flow in a profile-managed home.
+func (p *CodexProvider) Login(ctx context.Context, target config.ProfileID) error {
+	home := filepath.Join(p.ManagedRoot, string(target))
+	result, err := p.Runner.Run(ctx, execution.Command{
+		Name:        "codex",
+		Args:        []string{"login"},
+		Env:         map[string]string{"CODEX_HOME": home},
+		Interactive: true,
+	})
+	if err != nil {
+		return fmt.Errorf("cannot start Codex login: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("Codex login failed with exit code %d", result.ExitCode)
+	}
+	p.CurrentHome = home
+	return nil
+}
+
 func (p *CodexProvider) InspectCurrent(ctx context.Context) (Identity, error) {
 	home := p.CurrentHome
 	if home == "" {

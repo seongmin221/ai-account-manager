@@ -33,9 +33,10 @@
 ### 현재 구현 상태
 
 1단계부터 9단계의 핵심 계약과 테스트가 구현되어 있다. 현재 바이너리는 읽기·쓰기
-CLI, GitHub/Codex provider, Keychain adapter, provider transaction, zsh patch를
-포함한다. zsh 설정 파일에 wrapper를 자동 설치하는 동작과 실제 계정/Keychain을
-사용하는 macOS 수동 통합 검증은 별도 작업으로 남아 있다.
+CLI, GitHub/Codex provider, Keychain adapter, provider transaction, zsh patch,
+중복 방지형 zsh wrapper 설치, 상세 doctor 진단, Codex interactive login 흐름을
+포함한다. 실제 Enterprise host와 별도 테스트 계정/Keychain을 사용하는 전체
+macOS 수동 통합 검증만 별도 작업으로 남아 있다.
 
 ### 구현 세부
 

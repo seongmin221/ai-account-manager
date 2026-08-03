@@ -30,8 +30,9 @@ func (p *GitHubProvider) InspectCurrent(ctx context.Context) (Identity, error) {
 		host = "github.com"
 	}
 	result, err := p.Runner.Run(ctx, execution.Command{
-		Name: "gh",
-		Args: []string{"api", "user", "--hostname", host, "--jq", ".login"},
+		Name:  "gh",
+		Args:  []string{"api", "user", "--hostname", host, "--jq", ".login"},
+		Unset: githubTokenEnvironmentNames,
 	})
 	if err != nil {
 		return Identity{}, fmt.Errorf("cannot inspect GitHub account: %w", err)
@@ -99,8 +100,9 @@ func (p *GitHubProvider) Apply(ctx context.Context, plan ActivationPlan) (Rollba
 		return RollbackPlan{}, fmt.Errorf("invalid GitHub activation plan")
 	}
 	result, err := p.Runner.Run(ctx, execution.Command{
-		Name: "gh",
-		Args: []string{"auth", "switch", "--hostname", activation.Target.Host, "--user", activation.Target.Account},
+		Name:  "gh",
+		Args:  []string{"auth", "switch", "--hostname", activation.Target.Host, "--user", activation.Target.Account},
+		Unset: githubTokenEnvironmentNames,
 	})
 	if err != nil {
 		return RollbackPlan{}, fmt.Errorf("cannot switch GitHub account: %w", err)
@@ -120,8 +122,9 @@ func (p *GitHubProvider) Rollback(ctx context.Context, plan RollbackPlan) error 
 		return nil
 	}
 	result, err := p.Runner.Run(ctx, execution.Command{
-		Name: "gh",
-		Args: []string{"auth", "switch", "--hostname", previous.Host, "--user", previous.Account},
+		Name:  "gh",
+		Args:  []string{"auth", "switch", "--hostname", previous.Host, "--user", previous.Account},
+		Unset: githubTokenEnvironmentNames,
 	})
 	if err != nil {
 		return fmt.Errorf("cannot restore GitHub account: %w", err)
@@ -130,6 +133,13 @@ func (p *GitHubProvider) Rollback(ctx context.Context, plan RollbackPlan) error 
 		return fmt.Errorf("GitHub account rollback failed with exit code %d", result.ExitCode)
 	}
 	return nil
+}
+
+var githubTokenEnvironmentNames = []string{
+	"GH_TOKEN",
+	"GITHUB_TOKEN",
+	"GH_ENTERPRISE_TOKEN",
+	"GITHUB_ENTERPRISE_TOKEN",
 }
 
 type githubActivationPlan struct {

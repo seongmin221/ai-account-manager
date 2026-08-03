@@ -73,5 +73,6 @@ func cloneCommand(command Command) Command {
 	}
 	command.Args = args
 	command.Env = env
+	command.Unset = append([]string(nil), command.Unset...)
 	return command
 }

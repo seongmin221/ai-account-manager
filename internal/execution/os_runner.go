@@ -25,6 +25,23 @@ func (OSRunner) Run(ctx context.Context, command Command) (Result, error) {
 	process := exec.CommandContext(ctx, command.Name, command.Args...)
 	process.Dir = command.Dir
 	process.Env = patchedEnvironment(os.Environ(), command.Env, command.Unset)
+	if command.Interactive {
+		process.Stdin = os.Stdin
+		process.Stdout = os.Stdout
+		process.Stderr = os.Stderr
+		if err := process.Run(); err != nil {
+			result := Result{}
+			if process.ProcessState != nil {
+				result.ExitCode = process.ProcessState.ExitCode()
+			}
+			var exitError *exec.ExitError
+			if errors.As(err, &exitError) {
+				return result, nil
+			}
+			return result, err
+		}
+		return Result{ExitCode: process.ProcessState.ExitCode()}, nil
+	}
 
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &stdout

@@ -18,6 +18,8 @@ type writeOptions struct {
 	host     string
 	activate bool
 	shell    string
+	login    bool
+	yes      bool
 }
 
 func parseWriteOptions(args []string) (writeOptions, error) {
@@ -64,6 +66,10 @@ func parseWriteOptions(args []string) (writeOptions, error) {
 			options.host = args[index]
 		case "--activate":
 			options.activate = true
+		case "--login":
+			options.login = true
+		case "--yes":
+			options.yes = true
 		case "--shell":
 			if index+1 >= len(args) {
 				return writeOptions{}, fmt.Errorf("--shell requires a value")
@@ -100,7 +106,7 @@ func (c *CLI) add(args []string) error {
 	if err != nil {
 		return err
 	}
-	registry, github, _ := c.providerRegistry()
+	registry, github, codex := c.providerRegistry()
 	profile := document.Profiles[options.profile]
 	if profile.Providers == nil {
 		profile.Providers = make(map[config.ProviderID]config.ProviderConfig)
@@ -109,8 +115,20 @@ func (c *CLI) add(args []string) error {
 	if err != nil {
 		return apperrors.New(apperrors.UnknownProvider, err.Error())
 	}
+	if options.login {
+		for _, providerID := range selected {
+			if providerID != "codex" {
+				return apperrors.New(apperrors.ProviderConfigInvalid, "--login is supported only with --codex")
+			}
+		}
+	}
 	for _, providerID := range selected {
 		provider, _ := registry.Get(providerID)
+		if _, exists := profile.Providers[providerID]; exists && !options.yes {
+			if !c.confirm(fmt.Sprintf("Overwrite %s/%s registration? [y/N] ", options.profile, providerID)) {
+				return apperrors.New(apperrors.ProviderConfigInvalid, "registration cancelled")
+			}
+		}
 		if providerID == "github" {
 			if options.host != "" {
 				github.CurrentHost = options.host
@@ -118,6 +136,11 @@ func (c *CLI) add(args []string) error {
 				github.CurrentHost = existing
 			} else {
 				return apperrors.New(apperrors.GitHubHostRequired, "GitHub host is required for the first registration")
+			}
+		}
+		if providerID == "codex" && options.login {
+			if err := codex.Login(context.Background(), options.profile); err != nil {
+				return apperrors.New(apperrors.ProviderConfigInvalid, err.Error())
 			}
 		}
 		settings, err := provider.Capture(context.Background(), options.profile)
@@ -148,8 +171,8 @@ func (c *CLI) change(args []string) error {
 	if err != nil {
 		return newUsageError(err.Error())
 	}
-	if options.host != "" || options.activate {
-		return apperrors.New(apperrors.ProviderConfigInvalid, "--host and --activate are supported only by add")
+	if options.host != "" || options.activate || options.login || options.yes {
+		return apperrors.New(apperrors.ProviderConfigInvalid, "--host, --activate, --login, and --yes are supported only by add")
 	}
 	if options.shell != "" && options.shell != "zsh" {
 		return apperrors.New(apperrors.ProviderConfigInvalid, fmt.Sprintf("unsupported shell %q", options.shell))

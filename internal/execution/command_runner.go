@@ -4,11 +4,12 @@ import "context"
 
 // Command describes an external process invocation without using a shell.
 type Command struct {
-	Name  string
-	Args  []string
-	Env   map[string]string
-	Unset []string
-	Dir   string
+	Name        string
+	Args        []string
+	Env         map[string]string
+	Unset       []string
+	Dir         string
+	Interactive bool
 }
 
 type Result struct {

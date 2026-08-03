@@ -18,6 +18,8 @@ type CLI struct {
 	Runner      execution.CommandRunner
 	Credentials credentials.Store
 	ManagedRoot string
+	In          io.Reader
+	ZshrcPath   string
 	Out         io.Writer
 	ErrOut      io.Writer
 }
@@ -27,13 +29,35 @@ func NewDefaultCLI() *CLI {
 		Config:      config.NewFileStore(config.DefaultPath("")),
 		Runner:      execution.OSRunner{},
 		Credentials: credentials.NewDefaultStore(),
+		In:          os.Stdin,
+		ZshrcPath:   defaultZshrcPath(),
 		Out:         os.Stdout,
 		ErrOut:      os.Stderr,
 	}
 }
 
 func NewCLI(store *config.FileStore, runner execution.CommandRunner, out, errOut io.Writer) *CLI {
-	return &CLI{Config: store, Runner: runner, Out: out, ErrOut: errOut}
+	if runner == nil {
+		runner = execution.OSRunner{}
+	}
+	if store == nil {
+		store = config.NewFileStore(config.DefaultPath(""))
+	}
+	if out == nil {
+		out = io.Discard
+	}
+	if errOut == nil {
+		errOut = io.Discard
+	}
+	return &CLI{
+		Config:      store,
+		Runner:      runner,
+		Credentials: credentials.NewMemoryStore(),
+		In:          os.Stdin,
+		ZshrcPath:   defaultZshrcPath(),
+		Out:         out,
+		ErrOut:      errOut,
+	}
 }
 
 // Run executes the command and returns its documented process exit code.
@@ -85,7 +109,7 @@ func (c *CLI) initConfig(args []string) error {
 	if _, err := os.Stat(c.Config.Path); err == nil {
 		_, _ = fmt.Fprintf(c.Out, "Configuration already exists: %s\n", c.Config.Path)
 		if len(args) == 1 {
-			c.printZshIntegration()
+			return c.configureZshIntegration()
 		}
 		return nil
 	} else if !os.IsNotExist(err) {
@@ -96,7 +120,7 @@ func (c *CLI) initConfig(args []string) error {
 	}
 	_, _ = fmt.Fprintf(c.Out, "Initialized configuration: %s\n", c.Config.Path)
 	if len(args) == 1 {
-		c.printZshIntegration()
+		return c.configureZshIntegration()
 	}
 	return nil
 }
@@ -121,7 +145,20 @@ func (c *CLI) current() error {
 	_, _ = fmt.Fprintf(c.Out, "Overall mode: %s\n", document.OverallMode())
 	for _, providerID := range document.ProviderIDs() {
 		profileID := document.Active[providerID]
+		settings := document.Profiles[profileID].Providers[providerID]
 		_, _ = fmt.Fprintf(c.Out, "\n%s\n  profile: %s\n", providerID, profileID)
+		switch providerID {
+		case "github":
+			_, _ = fmt.Fprintf(c.Out, "  host: %s\n  account: %s\n  source: %s\n", settings["host"], settings["account"], settings["auth_source"])
+		case "codex":
+			available := "missing"
+			if ref := settings["credential_ref"]; ref != "" {
+				if exists, err := c.Credentials.Exists(context.Background(), ref); err == nil && exists {
+					available = "available"
+				}
+			}
+			_, _ = fmt.Fprintf(c.Out, "  home: %s\n  auth: %s\n", settings["codex_home"], available)
+		}
 	}
 	return nil
 }
@@ -153,19 +190,7 @@ func (c *CLI) list() error {
 }
 
 func (c *CLI) doctor() error {
-	if _, err := c.Config.Load(); err != nil {
-		return err
-	}
-	ghState := "unavailable"
-	if c.Runner.Exists(context.Background(), "gh") {
-		ghState = "available"
-	}
-	codexState := "unavailable"
-	if c.Runner.Exists(context.Background(), "codex") {
-		codexState = "available"
-	}
-	_, _ = fmt.Fprintf(c.Out, "config: valid\ngh: %s\ncodex: %s\n", ghState, codexState)
-	return nil
+	return c.runDoctor()
 }
 
 func (c *CLI) printHelp() {
@@ -175,13 +200,7 @@ func (c *CLI) printHelp() {
 
 func (c *CLI) printZshIntegration() {
 	_, _ = fmt.Fprintln(c.Out, "Add this wrapper to ~/.zshrc:")
-	_, _ = fmt.Fprintln(c.Out, "account-manager() {")
-	_, _ = fmt.Fprintln(c.Out, "  if [[ \"$1\" == \"change\" ]]; then")
-	_, _ = fmt.Fprintln(c.Out, "    eval \"$(command account-manager \"$@\" --shell zsh)\" || return")
-	_, _ = fmt.Fprintln(c.Out, "  else")
-	_, _ = fmt.Fprintln(c.Out, "    command account-manager \"$@\"")
-	_, _ = fmt.Fprintln(c.Out, "  fi")
-	_, _ = fmt.Fprintln(c.Out, "}")
+	_, _ = fmt.Fprint(c.Out, zshWrapperSnippet())
 }
 
 func (c *CLI) usage(message string) int {

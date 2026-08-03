@@ -107,8 +107,11 @@ func TestChangeOnlyActivatesSelectedCodexProvider(t *testing.T) {
 	cli := NewCLI(store, runner, &output, &errors)
 	cli.Credentials = credentialsStore
 	cli.ManagedRoot = managedRoot
-	if got := cli.Run([]string{"change", "--work", "--codex"}); got != 0 {
+	if got := cli.Run([]string{"change", "--work", "--codex", "--shell", "zsh"}); got != 0 {
 		t.Fatalf("change exit=%d output=%s errors=%s", got, output.String(), errors.String())
+	}
+	if strings.Contains(output.String(), "Changed profile") || !strings.Contains(output.String(), "export CODEX_HOME=") {
+		t.Fatalf("shell mode emitted non-shell output: %s", output.String())
 	}
 	updated, err := store.Load()
 	if err != nil {

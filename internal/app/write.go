@@ -196,10 +196,11 @@ func (c *CLI) changeWithOptions(options writeOptions) error {
 		}
 		return err
 	}
-	_, _ = fmt.Fprintf(c.Out, "Changed profile %q providers: %s\n", options.profile, stringsOrNone(result.Selected))
 	if options.shell == "zsh" {
+		// stdout is evaluated by the zsh wrapper; emit shell code only.
 		_, _ = fmt.Fprint(c.Out, renderProviderPatch(updated, result.Selected))
 	} else {
+		_, _ = fmt.Fprintf(c.Out, "Changed profile %q providers: %s\n", options.profile, stringsOrNone(result.Selected))
 		_, _ = fmt.Fprintln(c.Out, "Warning: current shell environment was not patched; use the zsh wrapper when shell integration is installed.")
 	}
 	return nil

@@ -6,6 +6,7 @@ package credentials
 #cgo darwin LDFLAGS: -framework Security -framework CoreFoundation
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,7 +14,7 @@ static CFStringRef am_string(const char *value) {
 	return CFStringCreateWithCString(NULL, value, kCFStringEncodingUTF8);
 }
 
-static CFMutableDictionaryRef am_query(const char *service, const char *account) {
+static CFMutableDictionaryRef am_query(const char *service, const char *account, int use_data_protection) {
 	CFMutableDictionaryRef query = CFDictionaryCreateMutable(
 		NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	CFStringRef service_value = am_string(service);
@@ -21,14 +22,16 @@ static CFMutableDictionaryRef am_query(const char *service, const char *account)
 	CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
 	CFDictionarySetValue(query, kSecAttrService, service_value);
 	CFDictionarySetValue(query, kSecAttrAccount, account_value);
-	CFDictionarySetValue(query, kSecUseDataProtectionKeychain, kCFBooleanTrue);
+	if (use_data_protection) {
+		CFDictionarySetValue(query, kSecUseDataProtectionKeychain, kCFBooleanTrue);
+	}
 	CFRelease(service_value);
 	CFRelease(account_value);
 	return query;
 }
 
-static OSStatus am_put(const char *service, const char *account, const void *bytes, size_t length) {
-	CFMutableDictionaryRef query = am_query(service, account);
+static OSStatus am_put(const char *service, const char *account, const void *bytes, size_t length, int use_data_protection) {
+	CFMutableDictionaryRef query = am_query(service, account, use_data_protection);
 	CFDataRef value = CFDataCreate(NULL, bytes, (CFIndex)length);
 	CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(
 		NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -44,8 +47,8 @@ static OSStatus am_put(const char *service, const char *account, const void *byt
 	return status;
 }
 
-static OSStatus am_get(const char *service, const char *account, void **out_bytes, size_t *out_length) {
-	CFMutableDictionaryRef query = am_query(service, account);
+static OSStatus am_get(const char *service, const char *account, void **out_bytes, size_t *out_length, int use_data_protection) {
+	CFMutableDictionaryRef query = am_query(service, account, use_data_protection);
 	CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue);
 	CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitOne);
 	CFTypeRef result = NULL;
@@ -77,14 +80,15 @@ static OSStatus am_get(const char *service, const char *account, void **out_byte
 	return errSecSuccess;
 }
 
-static OSStatus am_delete(const char *service, const char *account) {
-	CFMutableDictionaryRef query = am_query(service, account);
+static OSStatus am_delete(const char *service, const char *account, int use_data_protection) {
+	CFMutableDictionaryRef query = am_query(service, account, use_data_protection);
 	OSStatus status = SecItemDelete(query);
 	CFRelease(query);
 	return status;
 }
 
 static OSStatus am_item_not_found(void) { return errSecItemNotFound; }
+static OSStatus am_missing_entitlement(void) { return errSecMissingEntitlement; }
 */
 import "C"
 
@@ -96,8 +100,9 @@ import (
 
 const DefaultKeychainService = "com.seongmin221.ai-account-manager"
 
-// MacOSKeychainStore stores generic-password items in the user's data
-// protection Keychain. It intentionally exposes only opaque bytes to callers.
+// MacOSKeychainStore stores generic-password items in Keychain and exposes only
+// opaque bytes to callers. It prefers the Data Protection Keychain and retries
+// against the user's login Keychain only when the binary lacks its entitlement.
 type MacOSKeychainStore struct {
 	service string
 }
@@ -121,7 +126,10 @@ func (s *MacOSKeychainStore) Put(ctx context.Context, ref string, secret []byte)
 		data = C.CBytes(secret)
 		defer C.free(data)
 	}
-	status := C.am_put(service, account, data, C.size_t(len(secret)))
+	status := C.am_put(service, account, data, C.size_t(len(secret)), 1)
+	if status == C.am_missing_entitlement() {
+		status = C.am_put(service, account, data, C.size_t(len(secret)), 0)
+	}
 	if status != 0 {
 		return keychainError("put", ref, status)
 	}
@@ -137,7 +145,10 @@ func (s *MacOSKeychainStore) Get(ctx context.Context, ref string) ([]byte, error
 	defer freeCString(account)
 	var data unsafe.Pointer
 	var length C.size_t
-	status := C.am_get(service, account, &data, &length)
+	status := C.am_get(service, account, &data, &length, 1)
+	if status == C.am_missing_entitlement() {
+		status = C.am_get(service, account, &data, &length, 0)
+	}
 	if status == C.am_item_not_found() {
 		return nil, ErrNotFound
 	}
@@ -170,7 +181,10 @@ func (s *MacOSKeychainStore) Delete(ctx context.Context, ref string) error {
 	service, account := cStrings(s.service, ref)
 	defer freeCString(service)
 	defer freeCString(account)
-	status := C.am_delete(service, account)
+	status := C.am_delete(service, account, 1)
+	if status == C.am_missing_entitlement() {
+		status = C.am_delete(service, account, 0)
+	}
 	if status != 0 && status != C.am_item_not_found() {
 		return keychainError("delete", ref, status)
 	}

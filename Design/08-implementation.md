@@ -146,7 +146,9 @@ synchronizable: false
 
 추가 정책:
 
-- `kSecUseDataProtectionKeychain`을 활성화한다.
+- 가능하면 `kSecUseDataProtectionKeychain`을 사용한다. 서명·entitlement가 없는
+  개발용 CLI에서 `errSecMissingEntitlement`가 반환되면 같은 OS Keychain 안의
+  사용자 로그인 Keychain으로만 재시도한다. 이는 평문 파일 fallback이 아니다.
 - `kSecAttrAccessibleWhenUnlocked`를 사용해 잠긴 기기에서는 읽지 못하게 한다.
 - `trust-all` ACL이나 모든 애플리케이션 허용 옵션을 사용하지 않는다.
 - Keychain 접근 거부·잠금·손상 시 파일 저장소로 fallback하지 않는다.

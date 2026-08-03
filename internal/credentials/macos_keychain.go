@@ -127,7 +127,7 @@ func (s *MacOSKeychainStore) Put(ctx context.Context, ref string, secret []byte)
 		defer C.free(data)
 	}
 	status := C.am_put(service, account, data, C.size_t(len(secret)), 1)
-	if status == C.am_missing_entitlement() {
+	if status == C.am_missing_entitlement() || status == C.am_item_not_found() {
 		status = C.am_put(service, account, data, C.size_t(len(secret)), 0)
 	}
 	if status != 0 {
@@ -146,7 +146,7 @@ func (s *MacOSKeychainStore) Get(ctx context.Context, ref string) ([]byte, error
 	var data unsafe.Pointer
 	var length C.size_t
 	status := C.am_get(service, account, &data, &length, 1)
-	if status == C.am_missing_entitlement() {
+	if status == C.am_missing_entitlement() || status == C.am_item_not_found() {
 		status = C.am_get(service, account, &data, &length, 0)
 	}
 	if status == C.am_item_not_found() {
@@ -182,7 +182,7 @@ func (s *MacOSKeychainStore) Delete(ctx context.Context, ref string) error {
 	defer freeCString(service)
 	defer freeCString(account)
 	status := C.am_delete(service, account, 1)
-	if status == C.am_missing_entitlement() {
+	if status == C.am_missing_entitlement() || status == C.am_item_not_found() {
 		status = C.am_delete(service, account, 0)
 	}
 	if status != 0 && status != C.am_item_not_found() {
